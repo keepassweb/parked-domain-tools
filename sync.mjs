@@ -12,7 +12,7 @@
 
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, readFileSync, mkdirSync, copyFileSync, writeFileSync } from "node:fs";
-import { resolve4, resolve6 } from "node:dns/promises";
+import { resolve4 } from "node:dns/promises";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 
@@ -27,12 +27,6 @@ const BRANCH = "main";
 // still open). Both are checked read-only and reported; neither is ever
 // written by this script.
 const GITHUB_PAGES_A = ["185.199.108.153", "185.199.109.153", "185.199.110.153", "185.199.111.153"];
-const GITHUB_PAGES_AAAA = [
-  "2606:50c0:8000::153",
-  "2606:50c0:8001::153",
-  "2606:50c0:8002::153",
-  "2606:50c0:8003::153",
-];
 
 // Issues/Wiki/Projects/Discussions can be fully disabled via the API.
 const LOCKED_SETTINGS = { has_issues: false, has_wiki: false, has_projects: false, has_discussions: false };
@@ -77,11 +71,17 @@ function pagesConfig(org, repo) {
   return result.ok ? JSON.parse(result.output) : null;
 }
 
-async function dnsStatus(domain) {
-  const [a, aaaa] = await Promise.all([resolve4(domain).catch(() => []), resolve6(domain).catch(() => [])]);
+async function resolveStatus(host) {
+  const a = await resolve4(host).catch(() => []);
   if (GITHUB_PAGES_A.every((ip) => a.includes(ip))) return "OK";
-  if (a.length > 0) return `WRONG — resolves to ${a.join(", ")}, not GitHub Pages`;
+  if (a.length > 0) return `WRONG (${a.join(", ")})`;
   return "NOT CONFIGURED";
+}
+
+async function dnsStatus(domain) {
+  const [apex, www] = await Promise.all([resolveStatus(domain), resolveStatus(`www.${domain}`)]);
+  if (apex === "OK" && www === "OK") return "OK (apex + www)";
+  return `apex ${apex}, www ${www}`;
 }
 
 function verificationStatus(pages) {
