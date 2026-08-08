@@ -187,9 +187,17 @@ async function reconcileOne(entry, template) {
     if (!pages) {
       actions.push("enable Pages");
       if (apply) {
-        run("gh", ["api", "-X", "POST", `repos/${ORG}/${repo}/pages`, "--input", "-"], {
+        // A repo named <org>.github.io appears to get Pages auto-enabled
+        // by GitHub as soon as content lands on the default branch, which
+        // can race this check: the GET above returns 404 just before that
+        // happens, then this POST 409s because it's already done. Confirm
+        // actual state before treating that as a real failure.
+        const created = tryRun("gh", ["api", "-X", "POST", `repos/${ORG}/${repo}/pages`, "--input", "-"], {
           input: JSON.stringify({ build_type: "legacy", source: { branch: BRANCH, path: "/" } }),
         });
+        if (!created.ok && !pagesConfig(ORG, repo)) {
+          throw created.error;
+        }
       }
     }
 
