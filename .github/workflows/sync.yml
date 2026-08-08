@@ -1,0 +1,47 @@
+name: Sync parked domains
+
+# Reconciles the keepassweb parked-domain repos against domains.json —
+# see README.md. Runs weekly so the collaborators-only interaction limit
+# (capped by GitHub at a 6-month expiry) never lapses unnoticed.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # every Monday, 06:00 UTC
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  sync:
+    name: Sync
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
+        with:
+          node-version: '22.23.0'
+
+      - name: Generate App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3
+        with:
+          client-id: ${{ secrets.PARKED_DOMAIN_BOT_APP_ID }}
+          private-key: ${{ secrets.PARKED_DOMAIN_BOT_APP_PRIVATE_KEY }}
+          owner: keepassweb
+
+      - name: Authenticate git and gh as the App
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: gh auth setup-git
+
+      - name: Sync
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: node sync.mjs --apply

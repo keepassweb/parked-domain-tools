@@ -1,0 +1,6 @@
+{
+  "domains": [
+    { "repo": "keepassweb.github.io", "cname": null },
+    { "repo": "keepassweb.app", "cname": "keepassweb.app" }
+  ]
+}
