@@ -42,8 +42,9 @@ node sync.mjs --apply   # actually create/update repos
    | AAAA | `@` | `2606:50c0:8001::153` |
    | AAAA | `@` | `2606:50c0:8002::153` |
    | AAAA | `@` | `2606:50c0:8003::153` |
+   | CNAME | `www` | `keepassweb.github.io` |
 
-   `sync.mjs` reports DNS status until this resolves.
+   `sync.mjs` reports DNS status (apex and `www`) until this resolves.
 3. Once DNS resolves, verify the domain: repo → Settings → Pages →
    Verify, using the TXT record challenge GitHub gives you. Required per
    domain, not org-wide. `sync.mjs` reports verification status but can't
