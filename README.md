@@ -27,9 +27,27 @@ node sync.mjs --apply   # actually create/update repos
 
 ## Adding a domain
 
-Add an entry to `domains.json`, run `--plan` to check it, then `--apply`.
-DNS for the domain still has to be pointed at GitHub Pages separately —
-this tool only configures the GitHub side.
+1. Add an entry to `domains.json`, run `--plan` to check it, then
+   `--apply`. Do this before DNS is set up.
+2. Point DNS at GitHub Pages (provider-agnostic — set these at whichever
+   registrar/DNS host the domain uses):
+
+   | Type | Host | Value |
+   |---|---|---|
+   | A | `@` | `185.199.108.153` |
+   | A | `@` | `185.199.109.153` |
+   | A | `@` | `185.199.110.153` |
+   | A | `@` | `185.199.111.153` |
+   | AAAA | `@` | `2606:50c0:8000::153` |
+   | AAAA | `@` | `2606:50c0:8001::153` |
+   | AAAA | `@` | `2606:50c0:8002::153` |
+   | AAAA | `@` | `2606:50c0:8003::153` |
+
+   `sync.mjs` reports DNS status until this resolves.
+3. Once DNS resolves, verify the domain: repo → Settings → Pages →
+   Verify, using the TXT record challenge GitHub gives you. Required per
+   domain, not org-wide. `sync.mjs` reports verification status but can't
+   perform this step.
 
 ## Automation
 

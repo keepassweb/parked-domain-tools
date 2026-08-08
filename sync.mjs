@@ -3,18 +3,36 @@
 // domains.json. For each entry, ensures the repo exists, its content
 // matches the keepass-web/keepass-web.github.io template (excluding
 // CNAME), its CNAME matches the manifest, and GitHub Pages is enabled.
+// DNS and domain verification are reported but never written — see the
+// comment above GITHUB_PAGES_A below for why, and README.md for the
+// manual steps.
 //
 // Never deletes anything. Retiring a domain: remove its entry from
 // domains.json, then `gh repo delete keepassweb/<repo> --yes` yourself.
 
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, readFileSync, mkdirSync, copyFileSync, writeFileSync } from "node:fs";
+import { resolve4, resolve6 } from "node:dns/promises";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 
 const ORG = "keepassweb";
 const TEMPLATE_REPO = "keepass-web/keepass-web.github.io";
 const BRANCH = "main";
+
+// DNS and domain verification are both out of scope for automation (see
+// README) — Namecheap's API requires IP-whitelisting incompatible with
+// GitHub-hosted runners, and GitHub has no API for domain verification
+// at all (confirmed unavailable as of a 2022 community request that's
+// still open). Both are checked read-only and reported; neither is ever
+// written by this script.
+const GITHUB_PAGES_A = ["185.199.108.153", "185.199.109.153", "185.199.110.153", "185.199.111.153"];
+const GITHUB_PAGES_AAAA = [
+  "2606:50c0:8000::153",
+  "2606:50c0:8001::153",
+  "2606:50c0:8002::153",
+  "2606:50c0:8003::153",
+];
 
 // Issues/Wiki/Projects/Discussions can be fully disabled via the API.
 const LOCKED_SETTINGS = { has_issues: false, has_wiki: false, has_projects: false, has_discussions: false };
@@ -54,8 +72,28 @@ function tryRun(cmd, cmdArgs, opts = {}) {
 
 const repoExists = (org, repo) => tryRun("gh", ["repo", "view", `${org}/${repo}`, "--json", "name"]).ok;
 
-function pagesConfigured(org, repo) {
-  return tryRun("gh", ["api", `repos/${org}/${repo}/pages`]).ok;
+function pagesConfig(org, repo) {
+  const result = tryRun("gh", ["api", `repos/${org}/${repo}/pages`]);
+  return result.ok ? JSON.parse(result.output) : null;
+}
+
+async function dnsStatus(domain) {
+  const [a, aaaa] = await Promise.all([resolve4(domain).catch(() => []), resolve6(domain).catch(() => [])]);
+  if (GITHUB_PAGES_A.every((ip) => a.includes(ip))) return "OK";
+  if (a.length > 0) return `WRONG — resolves to ${a.join(", ")}, not GitHub Pages`;
+  return "NOT CONFIGURED";
+}
+
+function verificationStatus(pages) {
+  if (!pages) return "N/A — Pages not configured yet";
+  switch (pages.protected_domain_state) {
+    case "verified":
+      return "verified";
+    case "pending":
+      return "pending — TXT record not yet detected";
+    default:
+      return "NOT VERIFIED";
+  }
 }
 
 function currentSettings(org, repo) {
@@ -97,10 +135,14 @@ function copyIntoTarget(templateDir, targetDir, relPath) {
   copyFileSync(join(templateDir, relPath), dest);
 }
 
-function reconcileOne(entry, template) {
+async function reconcileOne(entry, template) {
   const { repo, cname } = entry;
   const label = cname ?? repo;
   const actions = [];
+
+  if (cname) {
+    console.log(`${label}: DNS ${await dnsStatus(cname)}`);
+  }
 
   if (!repoExists(ORG, repo)) {
     actions.push("create repo");
@@ -137,7 +179,12 @@ function reconcileOne(entry, template) {
       }
     }
 
-    if (!pagesConfigured(ORG, repo)) {
+    const pages = pagesConfig(ORG, repo);
+    if (cname) {
+      console.log(`${label}: domain verification ${verificationStatus(pages)}`);
+    }
+
+    if (!pages) {
       actions.push("enable Pages");
       if (apply) {
         run("gh", ["api", "-X", "POST", `repos/${ORG}/${repo}/pages`, "--input", "-"], {
@@ -182,7 +229,7 @@ const results = [];
 try {
   for (const entry of manifest.domains) {
     try {
-      results.push(reconcileOne(entry, template));
+      results.push(await reconcileOne(entry, template));
     } catch (err) {
       console.error(`${entry.repo}: FAILED — ${err.message}\n`);
       results.push({ repo: entry.repo, status: "failed" });
