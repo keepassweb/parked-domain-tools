@@ -41,6 +41,11 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: gh auth setup-git
 
+      - name: Commit as the App's bot
+        run: |
+          git config --global user.name "keepassweb-parked-domain-bot[bot]"
+          git config --global user.email "314738076+keepassweb-parked-domain-bot[bot]@users.noreply.github.com"
+
       - name: Sync
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
